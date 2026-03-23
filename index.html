@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FFmpeg Chapter Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        textarea, pre {
+            scrollbar-width: thin;
+            scrollbar-color: #475569 #1e293b;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div class="max-w-5xl mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-white mb-2 tracking-tight">FFmpeg Chapter Generator</h1>
+            <p class="text-slate-400">Convert a list of timestamps into FFmpeg metadata format</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Input Section -->
+            <div class="glass-panel p-6 rounded-2xl shadow-xl flex flex-col">
+                <div class="flex justify-between items-center mb-4">
+                    <label for="input-area" class="text-sm font-semibold uppercase tracking-wider text-blue-400">Input Chapters</label>
+                    <span class="text-xs text-slate-500">Format: 00:00:00 Title</span>
+                </div>
+                <textarea 
+                    id="input-area" 
+                    class="w-full h-[500px] bg-slate-900/50 border border-slate-700 rounded-lg p-4 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                    placeholder="00:00:00 Start&#10;00:05:30 Introduction&#10;00:12:45 Gameplay&#10;01:02:10 Conclusions"></textarea>
+                <div class="mt-4 flex gap-2">
+                    <button id="clear-btn" class="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors">Clear</button>
+                </div>
+            </div>
+
+            <!-- Output Section -->
+            <div class="glass-panel p-6 rounded-2xl shadow-xl flex flex-col">
+                <div class="flex justify-between items-center mb-4">
+                    <label class="text-sm font-semibold uppercase tracking-wider text-green-400">FFMETADATA Output</label>
+                    <button id="copy-btn" class="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded transition-colors">Copy</button>
+                </div>
+                <pre 
+                    id="output-area" 
+                    class="w-full h-[500px] bg-black/40 border border-slate-700 rounded-lg p-4 font-mono text-sm overflow-auto text-green-300"></pre>
+                <div class="mt-4">
+                    <button id="download-btn" class="w-full py-2 px-4 bg-green-700 hover:bg-green-600 text-white rounded-lg font-medium transition-colors">Download .txt file</button>
+                </div>
+            </div>
+        </div>
+
+        <footer class="mt-12 text-center text-slate-500 text-sm">
+            <p>FFmpeg command: <code>ffmpeg -i input.mp4 -i FFMETADATA.txt -map_metadata 1 -codec copy output.mp4</code></p>
+        </footer>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-6 py-3 rounded-full shadow-2xl opacity-0 pointer-events-none transition-opacity duration-300">
+        Copied to clipboard!
+    </div>
+
+    <script>
+        const inputArea = document.getElementById('input-area');
+        const outputArea = document.getElementById('output-area');
+        const copyBtn = document.getElementById('copy-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const downloadBtn = document.getElementById('download-btn');
+        const toast = document.getElementById('toast');
+
+        function parseTimestamp(timestamp) {
+            const parts = timestamp.split(':').map(Number);
+            let hours = 0, minutes = 0, seconds = 0;
+
+            if (parts.length === 3) {
+                [hours, minutes, seconds] = parts;
+            } else if (parts.length === 2) {
+                [minutes, seconds] = parts;
+            } else {
+                seconds = parts[0];
+            }
+
+            return (hours * 3600 + minutes * 60 + seconds) * 1000000000;
+        }
+
+        function generateMetadata() {
+            const lines = inputArea.value.trim().split('\n');
+            if (lines.length === 0 || (lines.length === 1 && lines[0] === "")) {
+                outputArea.textContent = "";
+                return;
+            }
+
+            let result = ";FFMETADATA1\n";
+            const chapters = [];
+
+            lines.forEach(line => {
+                const match = line.match(/^(\d{1,2}:\d{2}(?::\d{2})?)\s+(.*)$/);
+                if (match) {
+                    chapters.push({
+                        start: parseTimestamp(match[1]),
+                        title: match[2].trim()
+                    });
+                }
+            });
+
+            for (let i = 0; i < chapters.length; i++) {
+                const isLast = (i === chapters.length - 1);
+                const start = chapters[i].start;
+                const end = isLast ? "" : chapters[i+1].start;
+
+                result += "\n[CHAPTER]\n";
+                result += "TIMEBASE=1/1000000000\n";
+                result += `START=${start}\n`;
+                result += `END=${end}\n`;
+                result += `title=${chapters[i].title}\n`;
+            }
+
+            outputArea.textContent = result;
+        }
+
+        function showToast(message) {
+            toast.textContent = message;
+            toast.classList.remove('opacity-0');
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+            }, 2000);
+        }
+
+        inputArea.addEventListener('input', generateMetadata);
+
+        copyBtn.addEventListener('click', () => {
+            if (!outputArea.textContent) return;
+            const text = outputArea.textContent;
+            
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast("Copied to clipboard!");
+            } catch (err) {
+                showToast("Error while copying");
+            }
+            document.body.removeChild(textArea);
+        });
+
+        clearBtn.addEventListener('click', () => {
+            inputArea.value = "";
+            generateMetadata();
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            const content = outputArea.textContent;
+            if (!content) return;
+            
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'FFMETADATA.txt';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        });
+
+        inputArea.dispatchEvent(new Event('input'));
+    </script>
+</body>
+</html>
