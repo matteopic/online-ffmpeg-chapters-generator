@@ -6,6 +6,8 @@ This tool converts a simple list of timestamps and titles into the structured FF
 
 [Use online for free](https://matteopic.github.io/online-ffmpeg-chapters-generator/)
 
+![Screenshot](screenshot.png)
+
 ## Features
 
 * **Instant Conversion**: Automatically generates metadata as you type.
